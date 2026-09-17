@@ -1,0 +1,83 @@
+name: Atualiza imagem do serviço
+
+# Chamado pelas pipelines de CI/CD do repositório fiap-tech-challenge-fase-5-services
+# (ci-ngo-service.yaml, ci-donation-service.yaml, ci-volunteer-service.yaml) depois de
+# publicar a imagem no ECR. image_repository já vem resolvido dinamicamente pela
+# pipeline chamadora via `aws-actions/amazon-ecr-login` (steps.ecrlogin.outputs.registry)
+# — não depende de nenhum secret fixo com a URL do ECR, então continua funcionando
+# mesmo trocando de conta AWS Academy entre sessões.
+on:
+  workflow_call:
+    inputs:
+      service:
+        description: "Nome do serviço, igual ao nome da pasta em helm/ (ex: donation-service)"
+        required: true
+        type: string
+      image_repository:
+        description: "Repositório da imagem no ECR, sem a tag (ex: <account>.dkr.ecr.us-east-1.amazonaws.com/fiap-tc-f5-donation-reg)"
+        required: true
+        type: string
+      image_tag:
+        description: "Tag da imagem publicada nesta execução"
+        required: true
+        type: string
+    secrets:
+      GITOPS_PUSH_TOKEN:
+        description: "Token com permissão de push neste repositório (o job roda no contexto do repositório chamador, então o GITHUB_TOKEN padrão não serve)"
+        required: true
+
+jobs:
+  update-values:
+    name: Atualiza values.yaml
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout do repositório GitOps
+        uses: actions/checkout@v4
+        with:
+          repository: nascied/fiap-tech-challenge-fase-5-gitops
+          ref: main
+          token: ${{ secrets.GITOPS_PUSH_TOKEN }}
+
+      - name: Valida se o chart do serviço existe
+        run: |
+          FILE="helm/${{ inputs.service }}/values.yaml"
+          test -f "$FILE" || { echo "Chart não encontrado: $FILE"; exit 1; }
+
+      - name: Atualiza image.repository e image.tag
+        # yq já vem pré-instalado nos runners ubuntu-latest do GitHub Actions
+        # (mesma premissa do update-image.yaml original, fase 3).
+        run: |
+          FILE="helm/${{ inputs.service }}/values.yaml"
+          yq -i '.image.repository = "${{ inputs.image_repository }}"' "$FILE"
+          yq -i '.image.tag = "${{ inputs.image_tag }}"' "$FILE"
+
+      - name: Confere se a tag foi aplicada
+        run: |
+          FILE="helm/${{ inputs.service }}/values.yaml"
+          grep -q "${{ inputs.image_tag }}" "$FILE" \
+            || { echo "Falha ao atualizar a tag da imagem em $FILE"; exit 1; }
+
+      - name: Commit e push
+        run: |
+          FILE="helm/${{ inputs.service }}/values.yaml"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add "$FILE"
+          if git diff --cached --quiet; then
+            echo "Nenhuma mudança no values.yaml, pulando commit."
+            exit 0
+          fi
+          git commit -m "chore: atualiza imagem do ${{ inputs.service }} para ${{ inputs.image_tag }}"
+          success=false
+          for i in 1 2 3; do
+            if git pull --rebase origin main && git push origin HEAD:main; then
+              success=true
+              break
+            fi
+            echo "Tentativa $i de push falhou, tentando novamente em 5s..."
+            sleep 5
+          done
+          if [ "$success" != "true" ]; then
+            echo "Falha ao fazer push após 3 tentativas."
+            exit 1
+          fi

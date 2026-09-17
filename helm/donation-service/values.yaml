@@ -1,0 +1,67 @@
+namespace: fiap-tc-f5
+image:
+  # Placeholder — substituir pela URL real do output aws_ecr_repository_repository_url
+  # do module.ecr (iac/terraform), ou por uma pipeline de CD que o preencha automaticamente.
+  repository: "<AWS_ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/fiap-tc-f5-donation-reg"
+  tag: latest
+replicas: 1
+port: 8082
+# Tier 0 (Hot Path) no DRP — ver docs/drp/DRP.md do repo de infra. Requests/limits
+# mantidos iguais aos demais serviços por ora; ajustar com base em métrica real de
+# CPU/memória assim que o cluster estiver rodando (requisito de Rightsizing do hackathon).
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 200m
+    memory: 256Mi
+probe:
+  path: /health
+configMap:
+  PORT: "8082"
+  AWS_REGION: "us-east-1"
+  # Observabilidade (OpenTelemetry -> otel-collector -> Datadog/Prometheus/Loki).
+  # Go: presença/ausência de OTEL_EXPORTER_OTLP_ENDPOINT já liga/desliga o
+  # tracing — não existe um TRACES_EXPORTER separado como nos serviços Python.
+  # Não é segredo (é só um endpoint interno do cluster), por isso fica no
+  # ConfigMap, não no Secret. Aponta pro otel-collector (repo observability),
+  # não direto pro Datadog Agent — é o Collector quem roteia: traces->Datadog,
+  # métricas->Prometheus, logs->Loki (mesmo padrão já usado no config.env do
+  # repo services; estava desalinhado aqui até esta correção).
+  OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector.monitoring.svc.cluster.local:4318"
+  # A partir do otelhttp v0.55.0 (ver go.mod do donation-service), o histograma
+  # http.server.request.duration (convenção nova, consultada pelos dashboards
+  # SRE) só é emitido com essa variável setada.
+  OTEL_SEMCONV_STABILITY_OPT_IN: "http"
+# DATABASE_URL, AWS_SQS_URL e as credenciais AWS vêm do AWS Secrets Manager via
+# Secrets Store CSI Driver (module.secrets + aws-secrets-store-csi-driver-provider
+# no repo de infra) — não ficam como Secret literal no Helm. Ver
+# templates/secretproviderclass.yaml e templates/serviceaccount.yaml.
+secret: {}
+awsSecrets:
+  enabled: true
+  # Nome do secret no Secrets Manager — criado por module.secrets
+  # (iac/terraform/modules/secretsmanager) no repo de infra.
+  secretName: "fiap-tc-f5-donation-service"
+  keys:
+    - DATABASE_URL
+    - AWS_SQS_URL
+    - AWS_ACCESS_KEY_ID
+    - AWS_SECRET_ACCESS_KEY
+    - AWS_SESSION_TOKEN
+autoscaling:
+  enabled: true
+  minReplicas: 1
+  maxReplicas: 3
+  cpuUtilization: 70
+  memoryUtilization: 80
+ingress:
+  enabled: true
+  className: nginx
+  annotations: {}
+  paths:
+    - /donations
+dbInit:
+  enabled: true
+  image: postgres:16-alpine
