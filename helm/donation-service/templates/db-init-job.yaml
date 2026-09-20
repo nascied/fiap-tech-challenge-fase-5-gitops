@@ -1,0 +1,64 @@
+{{- if .Values.dbInit.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ .Chart.Name }}-db-init
+  namespace: {{ .Values.namespace }}
+  annotations:
+    helm.sh/hook: pre-install,pre-upgrade
+    helm.sh/hook-weight: "-5"
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 2
+  template:
+    metadata:
+      name: {{ .Chart.Name }}-db-init
+    spec:
+      restartPolicy: Never
+      {{- if .Values.awsSecrets.enabled }}
+      serviceAccountName: {{ .Chart.Name }}
+      {{- end }}
+      containers:
+        - name: db-init
+          image: "{{ .Values.dbInit.image }}"
+          command: ["sh", "-c"]
+          {{- if .Values.awsSecrets.enabled }}
+          # Lido do arquivo montado pelo CSI Driver, não via secretKeyRef: o Secret
+          # nativo do Kubernetes só é sincronizado pelo Secrets Store CSI Driver
+          # quando ALGUM pod monta o volume CSI referenciando o SecretProviderClass
+          # — o próprio Job precisa montar o volume pra garantir que o valor exista
+          # a tempo, já que não dá pra depender de outro pod ter montado antes dele.
+          args:
+            - 'psql "$(cat /mnt/secrets-store/DATABASE_URL)" -v ON_ERROR_STOP=1 -f /sql/init.sql'
+          {{- else }}
+          args:
+            - 'psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f /sql/init.sql'
+          env:
+            # Valor literal do values.yaml, não via secretKeyRef: o Secret do Kubernetes
+            # pode não existir ainda nesta fase (hooks rodam antes dos recursos normais
+            # do release), e não faz sentido tornar o Secret também hook só por causa
+            # disso (ele viraria efêmero e seria removido pelo prune após o hook rodar).
+            - name: DATABASE_URL
+              value: {{ .Values.secret.DATABASE_URL | quote }}
+          {{- end }}
+          volumeMounts:
+            - name: sql
+              mountPath: /sql
+            {{- if .Values.awsSecrets.enabled }}
+            - name: aws-secrets
+              mountPath: /mnt/secrets-store
+              readOnly: true
+            {{- end }}
+      volumes:
+        - name: sql
+          configMap:
+            name: {{ .Chart.Name }}-db-init
+        {{- if .Values.awsSecrets.enabled }}
+        - name: aws-secrets
+          csi:
+            driver: secrets-store.csi.k8s.io
+            readOnly: true
+            volumeAttributes:
+              secretProviderClass: {{ .Chart.Name }}-aws-secrets
+        {{- end }}
+{{- end }}

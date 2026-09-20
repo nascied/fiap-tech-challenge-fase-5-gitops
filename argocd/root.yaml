@@ -1,0 +1,21 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: root
+  namespace: argocd
+spec:
+  project: default
+  source:
+    # Verificar se essa é mesmo a URL final do repositório antes do primeiro apply.
+    repoURL: https://github.com/nascied/fiap-tech-challenge-fase-5-gitops
+    targetRevision: main
+    path: argocd/root
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

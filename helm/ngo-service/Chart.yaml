@@ -1,0 +1,6 @@
+apiVersion: v2
+name: ngo-service
+description: Helm chart do ngo-service (Solidary Tech - Hackathon Fase 5)
+type: application
+version: 0.1.0
+appVersion: "1.0.0"

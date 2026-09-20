@@ -1,0 +1,69 @@
+namespace: fiap-tc-f5
+image:
+  # Placeholder — substituir pela URL real do output aws_ecr_repository_repository_url
+  # do module.ecr (iac/terraform), ou por uma pipeline de CD que o preencha automaticamente.
+  repository: "<AWS_ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/fiap-tc-f5-ngo-reg"
+  tag: latest
+replicas: 1
+port: 8081
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 200m
+    memory: 256Mi
+probe:
+  path: /health
+configMap:
+  PORT: "8081"
+  # Observabilidade (OpenTelemetry -> otel-collector -> Datadog/Prometheus/Loki).
+  # Ver README do repo de services, seção "Observabilidade". Desligado por
+  # padrão (OTEL_TRACES_EXPORTER=none) — trocar para "otlp" quando o Datadog
+  # Agent estiver disponível no cluster.
+  OTEL_SERVICE_NAME: "ngo-service"
+  OTEL_EXPORTER_OTLP_PROTOCOL: "http/protobuf"
+  OTEL_TRACES_EXPORTER: "none"
+  OTEL_METRICS_EXPORTER: "none"
+  OTEL_LOGS_EXPORTER: "none"
+  # Sem isso, a instrumentação WSGI/Flask emite só a convenção antiga
+  # (http.server.duration) — os dashboards SRE consultam a nova
+  # (http_server_request_duration_seconds_count).
+  OTEL_SEMCONV_STABILITY_OPT_IN: "http"
+  # Não é segredo (é só um endpoint interno do cluster), por isso fica no
+  # ConfigMap, não no Secret — mesmo critério do donation-service/volunteer-service.
+  # Aponta pro otel-collector (repo observability), não direto pro Datadog Agent
+  # — estava desalinhado com o config.env do repo services até esta correção.
+  OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector.monitoring.svc.cluster.local:4318"
+# DATABASE_URL vem do AWS Secrets Manager via Secrets Store CSI Driver
+# (module.secrets no repo de infra) — mesmo padrão do donation-service/
+# volunteer-service, mesmo o ngo-service não acessando mais nenhum outro
+# recurso AWS. Antes disso era um placeholder literal fixo (`CHANGE_ME`)
+# sem nenhum mecanismo automatizado de sincronização pós-`terraform apply`.
+# Ver templates/secretproviderclass.yaml e templates/serviceaccount.yaml.
+secret: {}
+awsSecrets:
+  enabled: true
+  # Nome do secret no Secrets Manager — criado por module.secrets
+  # (iac/terraform/modules/secretsmanager) no repo de infra.
+  secretName: "fiap-tc-f5-ngo-service"
+  keys:
+    - DATABASE_URL
+autoscaling:
+  enabled: true
+  minReplicas: 1
+  maxReplicas: 3
+  cpuUtilization: 70
+  memoryUtilization: 80
+ingress:
+  enabled: true
+  className: nginx
+  annotations: {}
+  # Rotas reais do serviço — sem prefixo/rewrite, já que os paths do Flask já são
+  # curtos e sem colisão entre serviços. /health fica de fora de propósito: não é
+  # feito pra tráfego externo, só pra liveness/readiness probe (acesso direto ao Pod).
+  paths:
+    - /ngos
+dbInit:
+  enabled: true
+  image: postgres:16-alpine
