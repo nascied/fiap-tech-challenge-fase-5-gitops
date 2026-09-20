@@ -2,8 +2,8 @@ namespace: fiap-tc-f5
 image:
   # Placeholder — substituir pela URL real do output aws_ecr_repository_repository_url
   # do module.ecr (iac/terraform), ou por uma pipeline de CD que o preencha automaticamente.
-  repository: "<AWS_ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/fiap-tc-f5-volunteer-reg"
-  tag: latest
+  repository: "170845796237.dkr.ecr.us-east-1.amazonaws.com/fiap-tc-f5-volunteer-reg"
+  tag: cf67486
 replicas: 1
 port: 8083
 resources:
