@@ -15,9 +15,6 @@ spec:
       labels:
         app: {{ .Chart.Name }}
     spec:
-      {{- if .Values.awsSecrets.enabled }}
-      serviceAccountName: {{ .Chart.Name }}
-      {{- end }}
       containers:
         - name: {{ .Chart.Name }}
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
@@ -41,7 +38,7 @@ spec:
             periodSeconds: 5
             timeoutSeconds: 3
             failureThreshold: 3
-          {{- if or .Values.configMap .Values.secret .Values.awsSecrets.enabled }}
+          {{- if or .Values.configMap .Values.secret .Values.externalSecret.enabled }}
           env:
             {{- range $key, $_ := .Values.configMap }}
             - name: {{ $key }}
@@ -50,8 +47,8 @@ spec:
                   name: {{ $.Chart.Name }}-config-map
                   key: {{ $key }}
             {{- end }}
-            {{- if .Values.awsSecrets.enabled }}
-            {{- range .Values.awsSecrets.keys }}
+            {{- if .Values.externalSecret.enabled }}
+            {{- range .Values.externalSecret.keys }}
             - name: {{ . }}
               valueFrom:
                 secretKeyRef:
@@ -68,18 +65,3 @@ spec:
             {{- end }}
             {{- end }}
           {{- end }}
-          {{- if .Values.awsSecrets.enabled }}
-          volumeMounts:
-            - name: aws-secrets
-              mountPath: "/mnt/secrets-store"
-              readOnly: true
-          {{- end }}
-      {{- if .Values.awsSecrets.enabled }}
-      volumes:
-        - name: aws-secrets
-          csi:
-            driver: secrets-store.csi.k8s.io
-            readOnly: true
-            volumeAttributes:
-              secretProviderClass: {{ .Chart.Name }}-aws-secrets
-      {{- end }}

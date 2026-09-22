@@ -35,18 +35,17 @@ configMap:
   # Aponta pro otel-collector (repo observability), não direto pro Datadog Agent
   # — estava desalinhado com o config.env do repo services até esta correção.
   OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector.monitoring.svc.cluster.local:4318"
-# DATABASE_URL vem do AWS Secrets Manager via Secrets Store CSI Driver
-# (module.secrets no repo de infra) — mesmo padrão do donation-service/
-# volunteer-service, mesmo o ngo-service não acessando mais nenhum outro
-# recurso AWS. Antes disso era um placeholder literal fixo (`CHANGE_ME`)
-# sem nenhum mecanismo automatizado de sincronização pós-`terraform apply`.
-# Ver templates/secretproviderclass.yaml e templates/serviceaccount.yaml.
+# DATABASE_URL vem de um Secret nativo do Kubernetes chamado ngo-service-secret,
+# criado DIRETO pelo Terraform (module.k8s_secrets, repo infra) — não pelo
+# Helm/CSI Driver. Mesmo motivo do donation-service (ver values.yaml de lá,
+# ou iac/terraform/modules/k8s-secrets/main.tf/CLAUDE.md pro detalhe
+# completo): o provider AWS do Secrets Store CSI Driver exige IRSA/EKS Pod
+# Identity, e nenhuma das duas funciona nesta conta Academy. Antes disso era
+# um placeholder literal fixo (`CHANGE_ME`) sem nenhum mecanismo automatizado
+# de sincronização pós-`terraform apply`.
 secret: {}
-awsSecrets:
+externalSecret:
   enabled: true
-  # Nome do secret no Secrets Manager — criado por module.secrets
-  # (iac/terraform/modules/secretsmanager) no repo de infra.
-  secretName: "fiap-tc-f5-ngo-service"
   keys:
     - DATABASE_URL
 autoscaling:

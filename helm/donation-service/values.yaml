@@ -34,21 +34,30 @@ configMap:
   # http.server.request.duration (convenção nova, consultada pelos dashboards
   # SRE) só é emitido com essa variável setada.
   OTEL_SEMCONV_STABILITY_OPT_IN: "http"
-# DATABASE_URL e AWS_SQS_URL vêm do AWS Secrets Manager via Secrets Store CSI
-# Driver (module.secrets + aws-secrets-store-csi-driver-provider no repo de
-# infra) — não ficam como Secret literal no Helm. Ver
-# templates/secretproviderclass.yaml e templates/serviceaccount.yaml.
+# DATABASE_URL e AWS_SQS_URL vêm de um Secret nativo do Kubernetes chamado
+# donation-service-secret, criado DIRETO pelo Terraform (module.k8s_secrets,
+# repo infra) — não pelo Helm/CSI Driver. Motivo: o provider AWS do Secrets
+# Store CSI Driver exige uma IAM role associada ao ServiceAccount (IRSA ou
+# EKS Pod Identity) pra sincronizar do Secrets Manager em runtime, e nenhuma
+# das duas opções funciona nesta conta Academy — testado de verdade (IRSA
+# exigiria criar role nova, proibido; Pod Identity com a LabRole existente
+# esbarra num deny explícito numa policy própria da conta pra editar a trust
+# policy dela). Ver comentário completo em
+# iac/terraform/modules/k8s-secrets/main.tf e o CLAUDE.md.
+#
+# externalSecret != awsSecrets (removido, CSI Driver não é mais usado neste
+# chart): o Deployment só REFERENCIA um Secret que já existe (criado por fora
+# do Helm release) — sem ServiceAccount, sem SecretProviderClass, sem volume
+# CSI. secret: {} continua vazio (não tem segredo literal gerenciado pelo
+# Helm).
 #
 # Sem credenciais AWS estáticas aqui (removidas numa sessão posterior):
 # confirmado empiricamente que a chamada real ao SQS funciona via cadeia
 # padrão de credenciais do SDK (IMDS -> instance profile do node -> LabRole),
 # sem nenhuma credencial explícita — mesmo caminho que o Velero já usa.
 secret: {}
-awsSecrets:
+externalSecret:
   enabled: true
-  # Nome do secret no Secrets Manager — criado por module.secrets
-  # (iac/terraform/modules/secretsmanager) no repo de infra.
-  secretName: "fiap-tc-f5-donation-service"
   keys:
     - DATABASE_URL
     - AWS_SQS_URL
