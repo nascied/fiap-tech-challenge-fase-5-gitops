@@ -37,20 +37,22 @@ configMap:
   # não direto pro Datadog Agent — estava desalinhado com o config.env do
   # repo services até esta correção.
   OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector.monitoring.svc.cluster.local:4318"
-# As credenciais AWS vêm do AWS Secrets Manager via Secrets Store CSI Driver
-# (module.secrets + aws-secrets-store-csi-driver-provider no repo de infra) —
-# não ficam como Secret literal no Helm. Ver templates/secretproviderclass.yaml
-# e templates/serviceaccount.yaml.
+# Sem Secrets Manager/CSI Driver neste serviço (removido numa sessão
+# posterior): as credenciais AWS estáticas que vinham de lá nunca foram
+# necessárias — confirmado empiricamente que a chamada real ao DynamoDB
+# funciona via cadeia padrão de credenciais do SDK (IMDS -> instance profile
+# do node -> LabRole), sem nenhuma credencial explícita. Sem esse secret não
+# sobra nada que precise vir do Secrets Manager (AWS_REGION/AWS_DYNAMODB_TABLE
+# já vêm do ConfigMap acima) — o serviço não precisa mais de ServiceAccount,
+# CSI Driver nem IRSA/Pod Identity. Isso também contorna de vez uma limitação
+# real da conta AWS Academy: o provider AWS do Secrets Store CSI Driver exige
+# uma IAM role associada ao ServiceAccount (IRSA ou EKS Pod Identity) — e a
+# LabRole não tem "pods.eks.amazonaws.com" na trust policy, então nenhuma das
+# duas opções funciona nesta conta (confirmado tentando criar a associação de
+# verdade: "Trust policy of the role provided is invalid").
 secret: {}
 awsSecrets:
-  enabled: true
-  # Nome do secret no Secrets Manager — criado por module.secrets
-  # (iac/terraform/modules/secretsmanager) no repo de infra.
-  secretName: "fiap-tc-f5-volunteer-service"
-  keys:
-    - AWS_ACCESS_KEY_ID
-    - AWS_SECRET_ACCESS_KEY
-    - AWS_SESSION_TOKEN
+  enabled: false
 autoscaling:
   enabled: true
   minReplicas: 1

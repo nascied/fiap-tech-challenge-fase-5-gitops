@@ -34,10 +34,15 @@ configMap:
   # http.server.request.duration (convenção nova, consultada pelos dashboards
   # SRE) só é emitido com essa variável setada.
   OTEL_SEMCONV_STABILITY_OPT_IN: "http"
-# DATABASE_URL, AWS_SQS_URL e as credenciais AWS vêm do AWS Secrets Manager via
-# Secrets Store CSI Driver (module.secrets + aws-secrets-store-csi-driver-provider
-# no repo de infra) — não ficam como Secret literal no Helm. Ver
+# DATABASE_URL e AWS_SQS_URL vêm do AWS Secrets Manager via Secrets Store CSI
+# Driver (module.secrets + aws-secrets-store-csi-driver-provider no repo de
+# infra) — não ficam como Secret literal no Helm. Ver
 # templates/secretproviderclass.yaml e templates/serviceaccount.yaml.
+#
+# Sem credenciais AWS estáticas aqui (removidas numa sessão posterior):
+# confirmado empiricamente que a chamada real ao SQS funciona via cadeia
+# padrão de credenciais do SDK (IMDS -> instance profile do node -> LabRole),
+# sem nenhuma credencial explícita — mesmo caminho que o Velero já usa.
 secret: {}
 awsSecrets:
   enabled: true
@@ -47,9 +52,6 @@ awsSecrets:
   keys:
     - DATABASE_URL
     - AWS_SQS_URL
-    - AWS_ACCESS_KEY_ID
-    - AWS_SECRET_ACCESS_KEY
-    - AWS_SESSION_TOKEN
 autoscaling:
   enabled: true
   minReplicas: 1
