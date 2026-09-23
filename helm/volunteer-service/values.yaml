@@ -20,13 +20,15 @@ configMap:
   AWS_REGION: "us-east-1"
   AWS_DYNAMODB_TABLE: "SolidaryTechVolunteers"
   # Observabilidade (OpenTelemetry -> otel-collector -> Datadog/Prometheus/Loki).
-  # Ver README do repo de services, seção "Observabilidade". Desligado por
-  # padrão (OTEL_TRACES_EXPORTER=none) — trocar para "otlp" quando o Datadog
-  # Agent estiver disponível no cluster.
+  # Ver README do repo de services, seção "Observabilidade". Ligado numa sessão
+  # posterior — Datadog já validado recebendo trace real do donation-service
+  # (API key real confirmada via /api/v1/validate), otel-collector com o
+  # Service renomeado (bug real corrigido, ver CLAUDE.md) — habilitando aqui
+  # também pra APM/dashboards SRE cobrirem os 3 serviços, não só o Tier 0.
   OTEL_SERVICE_NAME: "volunteer-service"
   OTEL_EXPORTER_OTLP_PROTOCOL: "http/protobuf"
-  OTEL_TRACES_EXPORTER: "none"
-  OTEL_METRICS_EXPORTER: "none"
+  OTEL_TRACES_EXPORTER: "otlp"
+  OTEL_METRICS_EXPORTER: "otlp"
   OTEL_LOGS_EXPORTER: "none"
   # Sem isso, a instrumentação WSGI/Flask emite só a convenção antiga
   # (http.server.duration) — os dashboards SRE consultam a nova
