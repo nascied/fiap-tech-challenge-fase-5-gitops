@@ -1,9 +1,13 @@
 namespace: fiap-tc-f5
 image:
-  # Placeholder — substituir pela URL real do output aws_ecr_repository_repository_url
-  # do module.ecr (iac/terraform), ou por uma pipeline de CD que o preencha automaticamente.
-  repository: "170845796237.dkr.ecr.us-east-1.amazonaws.com/fiap-tc-f5-donation-reg"
-  tag: cf67486
+  # Conta AWS Academy ativa nesta sessão (811944052857) — o valor anterior
+  # (170845796237) era resíduo de uma sessão Academy anterior (conta trocada
+  # entre sessões), desalinhado do que o Deployment real já usava.
+  repository: "811944052857.dkr.ecr.us-east-1.amazonaws.com/fiap-tc-f5-donation-reg"
+  # Rebuild com o fix de otelhttp v0.55.0 -> v0.62.0 + go 1.22 -> 1.23 (métrica
+  # http_server_request_duration_seconds agora é emitida de verdade — ver
+  # CLAUDE.md, seção "donation-service — métrica nova nunca chega").
+  tag: f9a8f49-otelfix
 replicas: 1
 port: 8082
 # Tier 0 (Hot Path) no DRP — ver docs/drp/DRP.md do repo de infra. Requests/limits
@@ -30,9 +34,13 @@ configMap:
   # métricas->Prometheus, logs->Loki (mesmo padrão já usado no config.env do
   # repo services; estava desalinhado aqui até esta correção).
   OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector.monitoring.svc.cluster.local:4318"
-  # A partir do otelhttp v0.55.0 (ver go.mod do donation-service), o histograma
+  # A partir do otelhttp v0.62.0 (ver go.mod do donation-service), o histograma
   # http.server.request.duration (convenção nova, consultada pelos dashboards
-  # SRE) só é emitido com essa variável setada.
+  # SRE) passou a ser emitido por padrão, sem depender desta variável — v0.54.0
+  # a v0.61.0 tinham a variável mas nunca implementaram a métrica nova de fato
+  # (só as trace attributes). Hoje esta variável só decide se a métrica ANTIGA
+  # também é emitida em paralelo ("http/dup") — não usamos esse valor, então só
+  # a nova é emitida.
   OTEL_SEMCONV_STABILITY_OPT_IN: "http"
 # DATABASE_URL e AWS_SQS_URL vêm de um Secret nativo do Kubernetes chamado
 # donation-service-secret, criado DIRETO pelo Terraform (module.k8s_secrets,
