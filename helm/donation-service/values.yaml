@@ -15,11 +15,11 @@ port: 8082
 # CPU/memória assim que o cluster estiver rodando (requisito de Rightsizing do hackathon).
 resources:
   requests:
-    cpu: 100m
-    memory: 128Mi
-  limits:
-    cpu: 200m
+    cpu: 250m
     memory: 256Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
 probe:
   path: /health
 configMap:
